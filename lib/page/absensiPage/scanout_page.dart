@@ -20,7 +20,6 @@ class _ScanOutPageState extends State<ScanOutPage> {
   String selectedDate = '';
   String? selectedTime;
 
-  // final url = Uri.parse("http://10.0.2.2:8000/api/absensi/out");
   final url = Uri.parse("${Config.apiUrl}/api/absensi/out");
   static const validQrUrl = "https://qrco.de/kbsk01";
 
@@ -32,17 +31,19 @@ class _ScanOutPageState extends State<ScanOutPage> {
   void initState() {
     super.initState();
     loadSelectedDate();
-    loadSelectedTime(); // Load time from SharedPreferences
+    loadSelectedTime();
   }
 
   // Load tanggal dari SharedPreferences atau gunakan tanggal hari ini jika belum ada
   void loadSelectedDate() async {
     final prefs = await SharedPreferences.getInstance();
     String? savedDate = prefs.getString('selected_date');
+
     if (savedDate == null) {
       savedDate = DateTime.now().toIso8601String().split("T").first;
       await prefs.setString('selected_date', savedDate);
     }
+
     if (mounted) {
       setState(() {
         selectedDate = savedDate!;
@@ -50,22 +51,54 @@ class _ScanOutPageState extends State<ScanOutPage> {
     }
   }
 
-  // Load waktu dari SharedPreferences
+  // ✅ DIPERBAIKI: Load waktu dengan format 24-jam (HH:mm:ss)
   void loadSelectedTime() async {
     final prefs = await SharedPreferences.getInstance();
     String? savedTime = prefs.getString('selected_time');
+
     if (savedTime != null) {
       setState(() {
         selectedTime = savedTime;
       });
+      debugPrint("Loaded Time: $selectedTime");
     } else {
-      selectedTime = null; // Jika tidak ada, maka waktu akan diambil dari waktu real-time
+      // ✅ Default ke waktu sekarang dalam format HH:mm:ss
+      selectedTime = _getCurrentTimeFormatted();
+      debugPrint("Default Time: $selectedTime");
+    }
+  }
+
+  // ✅ TAMBAHAN: Helper untuk get waktu sekarang dalam format HH:mm:ss
+  String _getCurrentTimeFormatted() {
+    final now = DateTime.now();
+    return "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
+  }
+
+  // ✅ TAMBAHAN: Fungsi untuk format waktu ke HH:mm:ss
+  String _formatWaktuToBackend(String waktu) {
+    try {
+      // Jika sudah format HH:mm:ss, return langsung
+      if (RegExp(r'^\d{2}:\d{2}:\d{2}$').hasMatch(waktu)) {
+        return waktu;
+      }
+
+      // Jika format HH:mm, tambahkan :00
+      if (RegExp(r'^\d{2}:\d{2}$').hasMatch(waktu)) {
+        return "$waktu:00";
+      }
+
+      // Fallback: gunakan waktu sekarang
+      return _getCurrentTimeFormatted();
+    } catch (e) {
+      debugPrint("Error format waktu: $e");
+      return _getCurrentTimeFormatted();
     }
   }
 
   Future<bool> isWithinRadius() async {
     try {
       Position position = await Geolocator.getCurrentPosition();
+
       double distanceInMeters = Geolocator.distanceBetween(
         centerLat,
         centerLng,
@@ -88,6 +121,7 @@ class _ScanOutPageState extends State<ScanOutPage> {
 
   void _showEmergencyDialog() {
     final TextEditingController linkController = TextEditingController();
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -105,6 +139,7 @@ class _ScanOutPageState extends State<ScanOutPage> {
               Navigator.pop(ctx);
 
               final inputLink = linkController.text.trim();
+
               if (inputLink != validQrUrl) {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -117,7 +152,9 @@ class _ScanOutPageState extends State<ScanOutPage> {
               }
 
               bool isValidLocation = await isWithinRadius();
+
               if (!mounted) return;
+
               if (!isValidLocation) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -134,6 +171,7 @@ class _ScanOutPageState extends State<ScanOutPage> {
               final jabatan = prefs.getString('jabatan') ?? '';
 
               if (!mounted) return;
+
               if (idKaryawan == null || idKaryawan.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -144,8 +182,8 @@ class _ScanOutPageState extends State<ScanOutPage> {
                 return;
               }
 
-              // Gunakan waktu yang diambil dari SharedPreferences atau real-time jika tidak ada
-              String waktu = selectedTime ?? TimeOfDay.now().format(context);
+              // ✅ DIPERBAIKI: Format waktu dengan benar
+              String waktu = selectedTime ?? _getCurrentTimeFormatted();
 
               await sendAbsensiOut(
                 idKaryawan: idKaryawan,
@@ -167,100 +205,104 @@ class _ScanOutPageState extends State<ScanOutPage> {
   }
 
   void _onDetect(BarcodeCapture capture) async {
-  if (isScanned) return; // Mencegah pemindaian ganda
+    if (isScanned) return;
 
-  setState(() {
-    isScanned = true; // Tandai pemindaian pertama
-  });
-
-  bool isValidLocation = await isWithinRadius();
-  if (!mounted) return;
-  if (!isValidLocation) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Kamu berada di luar area absensi yang diizinkan."),
-        backgroundColor: Colors.red,
-      ),
-    );
     setState(() {
-      isScanned = false; // Reset isScanned jika lokasi tidak valid
+      isScanned = true;
     });
-    return;
-  }
 
-  final Barcode? barcode = capture.barcodes.firstOrNull;
-  if (barcode != null && barcode.rawValue != null) {
-    final qrContent = barcode.rawValue!;
-
-    if (qrContent != validQrUrl) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("QR code tidak valid untuk absensi ini.")),
-      );
-      setState(() {
-        isScanned = false; // Reset isScanned jika QR tidak valid
-      });
-      return;
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    final idKaryawan = prefs.getString('id_karyawan');
-    final nama = prefs.getString('nama') ?? '';
-    final jabatan = prefs.getString('jabatan') ?? '';
+    bool isValidLocation = await isWithinRadius();
 
     if (!mounted) return;
-    if (idKaryawan == null || idKaryawan.isEmpty) {
+
+    if (!isValidLocation) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Data user tidak ditemukan. Silakan login terlebih dahulu."),
+          content: Text("Kamu berada di luar area absensi yang diizinkan."),
           backgroundColor: Colors.red,
         ),
       );
       setState(() {
-        isScanned = false; // Reset isScanned jika tidak ada data user
+        isScanned = false;
       });
       return;
     }
 
-    setState(() {
-      scannedResult = qrContent;
-    });
+    final Barcode? barcode = capture.barcodes.firstOrNull;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("QR berhasil discan.")),
-    );
+    if (barcode != null && barcode.rawValue != null) {
+      final qrContent = barcode.rawValue!;
 
-    // Gunakan waktu yang diambil dari SharedPreferences atau real-time jika tidak ada
-    String waktu = selectedTime ?? TimeOfDay.now().format(context); // Ambil waktu yang benar
+      if (qrContent != validQrUrl) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("QR code tidak valid untuk absensi ini.")),
+        );
+        setState(() {
+          isScanned = false;
+        });
+        return;
+      }
 
-    await sendAbsensiOut(
-      idKaryawan: idKaryawan,
-      nama: nama,
-      jabatan: jabatan,
-      tanggal: selectedDate,
-      waktu: waktu,
-      qrContent: qrContent,
-    );
+      final prefs = await SharedPreferences.getInstance();
+      final idKaryawan = prefs.getString('id_karyawan');
+      final nama = prefs.getString('nama') ?? '';
+      final jabatan = prefs.getString('jabatan') ?? '';
 
-    // Simpan waktu dan tanggal untuk keperluan absensi keluar
-    await prefs.setString('scan_out_date', selectedDate);
-    await prefs.setString('scan_out_time', waktu);
+      if (!mounted) return;
 
-    await Future.delayed(const Duration(seconds: 3)); // Delay untuk memastikan tidak ada pemindaian ganda
-    if (mounted) {
+      if (idKaryawan == null || idKaryawan.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Data user tidak ditemukan. Silakan login terlebih dahulu."),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() {
+          isScanned = false;
+        });
+        return;
+      }
+
       setState(() {
-        isScanned = false; // Reset flag setelah beberapa detik
-        scannedResult = null; // Reset hasil scan
+        scannedResult = qrContent;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("QR berhasil discan.")),
+      );
+
+      // ✅ DIPERBAIKI: Format waktu dengan benar
+      String waktu = selectedTime ?? _getCurrentTimeFormatted();
+
+      await sendAbsensiOut(
+        idKaryawan: idKaryawan,
+        nama: nama,
+        jabatan: jabatan,
+        tanggal: selectedDate,
+        waktu: waktu,
+        qrContent: qrContent,
+      );
+
+      await prefs.setString('scan_out_date', selectedDate);
+      await prefs.setString('scan_out_time', waktu);
+
+      await Future.delayed(const Duration(seconds: 3));
+
+      if (mounted) {
+        setState(() {
+          isScanned = false;
+          scannedResult = null;
+        });
+      }
+    } else {
+      setState(() {
+        isScanned = false;
       });
     }
-  } else {
-    setState(() {
-      isScanned = false; // Reset flag jika QR tidak valid
-    });
   }
-}
 
-
+  // ✅ DIPERBAIKI: Tambah debug log dan format waktu
   Future<void> sendAbsensiOut({
     required String idKaryawan,
     required String nama,
@@ -270,16 +312,26 @@ class _ScanOutPageState extends State<ScanOutPage> {
     required String qrContent,
   }) async {
     try {
+      // ✅ Format waktu ke HH:mm:ss (24-jam)
+      String formattedWaktu = _formatWaktuToBackend(waktu);
+
+      debugPrint("=== DEBUG SCAN OUT ===");
+      debugPrint("Waktu Original: $waktu");
+      debugPrint("Waktu Formatted: $formattedWaktu");
+
       final status = 'out';
+
       final bodyData = {
         'id_karyawan': idKaryawan,
         'nama': nama,
         'jabatan': jabatan,
         'tanggal': tanggal,
-        'waktu': waktu,
+        'waktu': formattedWaktu, // ✅ Gunakan waktu yang sudah diformat
         'status': status,
         'qr_content': qrContent,
       };
+
+      debugPrint("Body Data: ${jsonEncode(bodyData)}");
 
       final response = await http.post(
         url,
@@ -290,6 +342,9 @@ class _ScanOutPageState extends State<ScanOutPage> {
         body: jsonEncode(bodyData),
       );
 
+      debugPrint("Status Code: ${response.statusCode}");
+      debugPrint("Response Body: ${response.body}");
+
       if (!mounted) return;
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -297,14 +352,29 @@ class _ScanOutPageState extends State<ScanOutPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("✅ ${data['message']}")),
         );
+      } else if (response.statusCode == 422) {
+        // ✅ Handling khusus untuk error 422
+        final errorData = jsonDecode(response.body);
+        String errorMessage = errorData['message'] ?? 'Validasi gagal';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("❌ $errorMessage"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
       } else {
         final errorData = jsonDecode(response.body);
         String errorMessage = errorData['message'] ?? 'Gagal absen keluar';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("❌ $errorMessage")),
+          SnackBar(
+            content: Text("❌ $errorMessage (Status: ${response.statusCode})"),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } catch (e) {
+      debugPrint("Exception: $e");
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("❌ Terjadi kesalahan: $e")),

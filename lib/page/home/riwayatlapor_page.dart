@@ -235,13 +235,13 @@ class RiwayatLaporPageState extends State<RiwayatLaporPage> {
         backgroundColor: const Color(0xFF7C933F), 
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white), 
+          icon: const Icon(Icons.arrow_back, color: Colors.white), // ✅ Icon back putih
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           'Riwayat Laporan',
           style: TextStyle(
-            color: Colors.white, 
+            color: Colors.white, // ✅ Text putih
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
@@ -249,7 +249,7 @@ class RiwayatLaporPageState extends State<RiwayatLaporPage> {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.filter_list, color: Colors.white), 
+            icon: const Icon(Icons.filter_list, color: Colors.white), // ✅ Icon filter putih
             onPressed: _showFilterDialog,
             tooltip: 'Filter',
           ),

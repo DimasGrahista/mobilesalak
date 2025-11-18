@@ -358,15 +358,24 @@ class _ScanInPageState extends State<ScanInPage> {
     required String qrContent,
   }) async {
     try {
+      // ✅ Format waktu ke HH:mm:ss (24-jam)
+      String formattedWaktu = _formatWaktuToBackend(waktu);
+      
+      debugPrint("=== DEBUG ABSENSI ===");
+      debugPrint("Waktu Original: $waktu");
+      debugPrint("Waktu Formatted: $formattedWaktu");
+      
       final bodyData = {
         'id_karyawan': idKaryawan,
         'nama': nama,
         'jabatan': jabatan,
         'tanggal': tanggal,
-        'waktu': waktu,
+        'waktu': formattedWaktu, // ✅ Gunakan waktu yang sudah diformat
         'status': status,
         'qr_content': qrContent,
       };
+      
+      debugPrint("Body Data: ${jsonEncode(bodyData)}");
 
       final response = await http.post(
         url,
@@ -377,6 +386,9 @@ class _ScanInPageState extends State<ScanInPage> {
         body: jsonEncode(bodyData),
       );
 
+      debugPrint("Status Code: ${response.statusCode}");
+      debugPrint("Response Body: ${response.body}");
+
       if (!mounted) return;
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -384,16 +396,54 @@ class _ScanInPageState extends State<ScanInPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("✅ ${data['message']}")),
         );
+      } else if (response.statusCode == 422) {
+        // ✅ Tangani error 422 dengan detail
+        final error = jsonDecode(response.body);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("❌ ${error['message'] ?? 'Validasi gagal'}"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("❌ Gagal absen. Status: ${response.statusCode}")),
+          SnackBar(
+            content: Text("❌ Gagal absen. Status: ${response.statusCode}\n${response.body}"),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } catch (e) {
+      debugPrint("Exception: $e");
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("❌ Terjadi kesalahan: $e")),
       );
+    }
+  }
+
+  // ✅ Fungsi untuk format waktu ke HH:mm:ss
+  String _formatWaktuToBackend(String waktu) {
+    try {
+      // Jika sudah format HH:mm:ss, return langsung
+      if (RegExp(r'^\d{2}:\d{2}:\d{2}$').hasMatch(waktu)) {
+        return waktu;
+      }
+      
+      // Jika format HH:mm, tambahkan :00
+      if (RegExp(r'^\d{2}:\d{2}$').hasMatch(waktu)) {
+        return "$waktu:00";
+      }
+      
+      // Jika format lain (misal 8:30 AM), parse dan convert
+      // Fallback: gunakan waktu sekarang
+      final now = DateTime.now();
+      return "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
+    } catch (e) {
+      debugPrint("Error format waktu: $e");
+      final now = DateTime.now();
+      return "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
     }
   }
 
