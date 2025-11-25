@@ -25,8 +25,8 @@ class _AbsensiPageState extends State<AbsensiPage> {
   DateTime selectedTime = DateTime.now(); // Default waktu sekarang
   String formattedTime = '';  // Untuk menampilkan waktu yang sudah diformat
 
-  // final bool isTesting = true; // mode test
-  final bool isTesting = false;
+  final bool isTesting = true; // mode test
+  // final bool isTesting = false;
 
   @override
   void initState() {
