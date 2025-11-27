@@ -11,7 +11,7 @@ class RiwayatCutiPage extends StatefulWidget {
   const RiwayatCutiPage({super.key});
 
   @override
-  _RiwayatCutiPageState createState() => _RiwayatCutiPageState();
+  State<RiwayatCutiPage> createState() => _RiwayatCutiPageState(); // ← Ubah dari _RiwayatCutiPageState menjadi State<RiwayatCutiPage>
 }
 
 class _RiwayatCutiPageState extends State<RiwayatCutiPage> {
@@ -28,37 +28,26 @@ class _RiwayatCutiPageState extends State<RiwayatCutiPage> {
     _initializeData();
   }
 
-  // Inisialisasi data dan ambil token + id_karyawan
   Future<void> _initializeData() async {
     final prefs = await SharedPreferences.getInstance();
     token = prefs.getString('token');
     idKaryawan = prefs.getString('id_karyawan');
-
-    debugPrint("[DEBUG] Token: $token");
-    debugPrint("[DEBUG] ID Karyawan: $idKaryawan");
 
     if (token == null || idKaryawan == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Token atau ID Karyawan tidak ditemukan, silakan login ulang')),
       );
-      setState(() {
-        isLoading = false;
-      });
+      setState(() => isLoading = false);
       return;
     }
-
-    // Ambil bulan yang tersedia
     await fetchBulanTahun();
   }
 
-  // Mengambil bulan yang memiliki data cuti
   Future<void> fetchBulanTahun() async {
     if (token == null || idKaryawan == null) return;
 
     final url = Uri.parse('${Config.apiUrl}/api/cuti/$idKaryawan/available_months');
-    
-    debugPrint("[DEBUG] Fetching available months from: $url");
 
     try {
       final response = await http.get(
@@ -69,13 +58,9 @@ class _RiwayatCutiPageState extends State<RiwayatCutiPage> {
         },
       );
 
-      debugPrint("[DEBUG] Response Bulan-Tahun Status: ${response.statusCode}");
-      debugPrint("[DEBUG] Response Bulan-Tahun Body: ${response.body}");
-
       if (response.statusCode == 200) {
         final List list = json.decode(response.body);
-        List<String> newMonthOptions = ['Semua']; // Tambahkan opsi "Semua"
-
+        List<String> newMonthOptions = ['Semua'];
         for (var item in list) {
           try {
             final int bulan = item['month'];
@@ -86,27 +71,15 @@ class _RiwayatCutiPageState extends State<RiwayatCutiPage> {
             debugPrint("[ERROR] Gagal memproses item: $item => $e");
           }
         }
-
         setState(() {
           monthOptions = newMonthOptions;
           selectedMonth = monthOptions.isNotEmpty ? monthOptions[0] : null;
           isLoading = false;
         });
-
-        // Ambil semua riwayat cuti (tanpa filter bulan)
         if (selectedMonth != null) {
           await fetchRiwayatCuti(selectedMonth!);
         }
-      } else if (response.statusCode == 404) {
-        // Tidak ada data bulan, tapi tetap tampilkan opsi "Semua"
-        setState(() {
-          monthOptions = ['Semua'];
-          selectedMonth = 'Semua';
-          isLoading = false;
-        });
-        await fetchRiwayatCuti('Semua');
       } else {
-        debugPrint("[ERROR] Gagal mengambil bulan-tahun: ${response.statusCode}");
         setState(() {
           monthOptions = ['Semua'];
           selectedMonth = 'Semua';
@@ -125,7 +98,6 @@ class _RiwayatCutiPageState extends State<RiwayatCutiPage> {
     }
   }
 
-  // Mengambil riwayat cuti berdasarkan bulan yang dipilih
   Future<void> fetchRiwayatCuti(String bulanFormatted) async {
     setState(() {
       isLoading = true;
@@ -137,33 +109,23 @@ class _RiwayatCutiPageState extends State<RiwayatCutiPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Token atau ID Karyawan tidak ditemukan, silakan login ulang')),
       );
-      setState(() {
-        isLoading = false;
-      });
+      setState(() => isLoading = false);
       return;
     }
 
     Uri url;
-
-    // Jika pilih "Semua", ambil semua data tanpa filter bulan
     if (bulanFormatted == 'Semua') {
       url = Uri.parse('${Config.apiUrl}/api/cuti/$idKaryawan');
-      debugPrint("[DEBUG] Fetching all cuti from: $url");
     } else {
-      // Parse bulan dan tahun dari format "Januari 2025"
       final parts = bulanFormatted.split(' ');
       if (parts.length != 2) {
-        debugPrint("[ERROR] Format bulan tidak valid: $bulanFormatted");
         setState(() => isLoading = false);
         return;
       }
-
       final month = _getMonthNumber(parts[0]);
       final year = parts[1];
       final bulan = "$year-${month.toString().padLeft(2, '0')}";
-
       url = Uri.parse('${Config.apiUrl}/api/cuti/$idKaryawan?bulan=$bulan');
-      debugPrint("[DEBUG] Fetching cuti with filter from: $url");
     }
 
     try {
@@ -175,42 +137,24 @@ class _RiwayatCutiPageState extends State<RiwayatCutiPage> {
         },
       );
 
-      debugPrint("[DEBUG] Response Riwayat Cuti Status: ${response.statusCode}");
-      debugPrint("[DEBUG] Response Riwayat Cuti Body: ${response.body}");
-
       if (response.statusCode == 200) {
         final dynamic data = json.decode(response.body);
-        
-        // Handle jika response adalah array
         if (data is List) {
           setState(() {
             laporanList = List<Cuti>.from(data.map((item) => Cuti.fromJson(item)));
             isLoading = false;
           });
-          debugPrint("[DEBUG] Berhasil load ${laporanList.length} data cuti");
         } else {
           setState(() {
             laporanList = [];
             isLoading = false;
           });
         }
-      } else if (response.statusCode == 404) {
-        // Tidak ada data
-        debugPrint("[INFO] Tidak ada data cuti untuk filter ini");
-        setState(() {
-          laporanList = [];
-          isLoading = false;
-        });
       } else {
-        debugPrint("[ERROR] Gagal mengambil riwayat cuti. Kode: ${response.statusCode}");
         setState(() {
           laporanList = [];
           isLoading = false;
         });
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal mengambil riwayat cuti. Kode: ${response.statusCode}')),
-        );
       }
     } catch (e) {
       debugPrint("[ERROR] fetchRiwayatCuti exception: $e");
@@ -218,14 +162,9 @@ class _RiwayatCutiPageState extends State<RiwayatCutiPage> {
         laporanList = [];
         isLoading = false;
       });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Terjadi kesalahan: $e')),
-      );
     }
   }
 
-  // Fungsi untuk mendapatkan nama bulan dari nomor bulan
   String _getMonthName(int monthNumber) {
     const months = [
       'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -235,7 +174,6 @@ class _RiwayatCutiPageState extends State<RiwayatCutiPage> {
     return months[monthNumber - 1];
   }
 
-  // Fungsi untuk mendapatkan nomor bulan dari nama bulan
   int _getMonthNumber(String monthName) {
     const months = [
       'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -245,288 +183,551 @@ class _RiwayatCutiPageState extends State<RiwayatCutiPage> {
     return idx >= 0 ? idx + 1 : 0;
   }
 
-  // Fungsi untuk menentukan warna status (TETAP DIPERTAHANKAN)
   Color _getStatusColor(String status) {
     switch (status) {
       case 'Pending':
-        return Colors.yellow;
+        return const Color(0xFFFFA726);
       case 'Approved':
-        return Colors.green;
+        return const Color(0xFF66BB6A);
       case 'Rejected':
-        return Colors.red;
+        return const Color(0xFFEF5350);
       default:
-        return Colors.black;
+        return Colors.grey;
+    }
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'Pending':
+        return Icons.hourglass_empty;
+      case 'Approved':
+        return Icons.check_circle;
+      case 'Rejected':
+        return Icons.cancel;
+      default:
+        return Icons.help_outline;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: const BackButton(color: Colors.black),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF2D3436), size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: const Text(
           'Riwayat Cuti',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Color(0xFF2D3436),
+            fontWeight: FontWeight.w600,
+            fontSize: 18,
+          ),
         ),
         centerTitle: true,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: Colors.grey[200],
+            height: 1,
+          ),
+        ),
       ),
       body: Column(
         children: [
-          // Filter Bulan (Dropdown)
+          // Filter Section
           if (monthOptions.isNotEmpty)
             Container(
-              color: const Color(0xFF7C933F),
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04), // ← Fixed withOpacity
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
               child: Row(
                 children: [
-                  const Icon(Icons.filter_list, color: Colors.white),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7C933F).withValues(alpha: 0.1), // ← Fixed withOpacity
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.tune,
+                      color: Color(0xFF7C933F),
+                      size: 20,
+                    ),
+                  ),
                   const SizedBox(width: 12),
                   const Text(
-                    'Filter Bulan:',
+                    'Periode',
                     style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF636E72),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: DropdownButton<String>(
-                      value: selectedMonth,
-                      dropdownColor: const Color(0xFF7C933F),
-                      iconEnabledColor: Colors.white,
-                      underline: Container(),
-                      isExpanded: true,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      items: monthOptions.map((String month) {
-                        return DropdownMenuItem<String>(
-                          value: month,
-                          child: Text(
-                            month,
-                            style: const TextStyle(color: Colors.white),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: selectedMonth,
+                          isExpanded: true,
+                          icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF2D3436),
                           ),
-                        );
-                      }).toList(),
-                      onChanged: (String? newValue) {
-                        if (newValue != null && newValue != selectedMonth) {
-                          setState(() {
-                            selectedMonth = newValue;
-                          });
-                          fetchRiwayatCuti(newValue);
-                        }
-                      },
+                          items: monthOptions.map((String month) {
+                            return DropdownMenuItem<String>(
+                              value: month,
+                              child: Text(month),
+                            );
+                          }).toList(),
+                          onChanged: (String? newValue) {
+                            if (newValue != null && newValue != selectedMonth) {
+                              setState(() => selectedMonth = newValue);
+                              fetchRiwayatCuti(newValue);
+                            }
+                          },
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
 
-          // Info jumlah data
+          // Counter
           if (!isLoading && laporanList.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.all(12),
-              color: Colors.grey[100],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline, size: 18, color: Colors.grey),
-                  const SizedBox(width: 8),
                   Text(
-                    'Ditemukan ${laporanList.length} pengajuan cuti',
+                    '${laporanList.length} Pengajuan',
                     style: const TextStyle(
-                      color: Colors.grey,
-                      fontSize: 14,
+                      fontSize: 13,
+                      color: Color(0xFF636E72),
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
             ),
 
-          // List Riwayat Cuti
+          const SizedBox(height: 12),
+
+          // List Content
           Expanded(
             child: isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF7C933F),
+                    ),
+                  )
                 : laporanList.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              Icons.inbox_outlined,
-                              size: 80,
-                              color: Colors.grey[300],
+                            Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.inbox_outlined,
+                                size: 64,
+                                color: Colors.grey[400],
+                              ),
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 24),
                             Text(
-                              'Tidak ada data riwayat cuti',
+                              'Belum Ada Riwayat Cuti',
                               style: TextStyle(
-                                color: Colors.grey[600],
                                 fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Data pengajuan cuti akan muncul di sini',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey[500],
                               ),
                             ),
                           ],
                         ),
                       )
                     : RefreshIndicator(
+                        color: const Color(0xFF7C933F),
                         onRefresh: () async {
                           await fetchBulanTahun();
                         },
                         child: ListView.builder(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           itemCount: laporanList.length,
                           itemBuilder: (context, index) {
                             final cuti = laporanList[index];
-                            final tanggalPengajuan = DateFormat('dd/MM/yyyy').format(
+                            final tanggalPengajuan = DateFormat('dd MMM yyyy').format(
                               DateTime.parse(cuti.tanggalPengajuan),
                             );
+                            final tanggalMulai = DateFormat('dd MMM yyyy').format(
+                              DateTime.parse(cuti.tanggalMulai),
+                            );
+                            final tanggalAkhir = DateFormat('dd MMM yyyy').format(
+                              DateTime.parse(cuti.tanggalAkhir),
+                            );
 
-                            return Card(
-                              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              shape: RoundedRectangleBorder(
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
                                 borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.04), // ← Fixed withOpacity
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
                               ),
-                              elevation: 4,
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            cuti.kategori,
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(16),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => DetailCutiPage(
+                                          judul: cuti.kategori,
+                                          uraian: cuti.keterangan ?? 'Tidak ada keterangan',
+                                          status: cuti.statusValidasi,
+                                          tanggal: cuti.tanggalPengajuan,
+                                          foto: cuti.fotoBukti,
+                                          tanggalMulai: cuti.tanggalMulai,
+                                          tanggalAkhir: cuti.tanggalAkhir,
                                         ),
+                                      ),
+                                    );
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        // Header
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    cuti.kategori,
+                                                    style: const TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: Color(0xFF2D3436),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.calendar_today,
+                                                        size: 12,
+                                                        color: Colors.grey[500],
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        tanggalPengajuan,
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          color: Colors.grey[600],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 6,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: _getStatusColor(cuti.statusValidasi)
+                                                    .withValues(alpha: 0.1), // ← Fixed withOpacity
+                                                borderRadius: BorderRadius.circular(20),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    _getStatusIcon(cuti.statusValidasi),
+                                                    size: 14,
+                                                    color: _getStatusColor(cuti.statusValidasi),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    cuti.statusValidasi,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: _getStatusColor(cuti.statusValidasi),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+
+                                        const SizedBox(height: 16),
+
+                                        // Periode
                                         Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 6,
-                                          ),
+                                          padding: const EdgeInsets.all(12),
                                           decoration: BoxDecoration(
-                                            color: _getStatusColor(cuti.statusValidasi).withOpacity(0.2),
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(
-                                              color: _getStatusColor(cuti.statusValidasi),
-                                              width: 1.5,
-                                            ),
+                                            color: const Color(0xFFF5F7FA),
+                                            borderRadius: BorderRadius.circular(10),
                                           ),
-                                          child: Text(
-                                            cuti.statusValidasi,
-                                            style: TextStyle(
-                                              color: _getStatusColor(cuti.statusValidasi),
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12,
-                                            ),
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      'Tanggal Mulai',
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: Colors.grey[600],
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      tanggalMulai,
+                                                      style: const TextStyle(
+                                                        fontSize: 13,
+                                                        fontWeight: FontWeight.w600,
+                                                        color: Color(0xFF2D3436),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              Container(
+                                                width: 1,
+                                                height: 30,
+                                                color: Colors.grey[300],
+                                              ),
+                                              Expanded(
+                                                child: Padding(
+                                                  padding: const EdgeInsets.only(left: 12),
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        'Tanggal Akhir',
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: Colors.grey[600],
+                                                          fontWeight: FontWeight.w500,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        tanggalAkhir,
+                                                        style: const TextStyle(
+                                                          fontSize: 13,
+                                                          fontWeight: FontWeight.w600,
+                                                          color: Color(0xFF2D3436),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                      ],
-                                    ),
-                                    const Divider(height: 20),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          "Pengajuan: $tanggalPengajuan",
-                                          style: const TextStyle(fontSize: 14),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.date_range, size: 16, color: Colors.grey),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          "Mulai: ${cuti.tanggalMulai}",
-                                          style: const TextStyle(fontSize: 14),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.event, size: 16, color: Colors.grey),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          "Akhir: ${cuti.tanggalAkhir}",
-                                          style: const TextStyle(fontSize: 14),
-                                        ),
-                                      ],
-                                    ),
-                                    if (cuti.keterangan != null && cuti.keterangan!.isNotEmpty) ...[
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const Icon(Icons.notes, size: 16, color: Colors.grey),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              "Keterangan: ${cuti.keterangan}",
-                                              style: const TextStyle(fontSize: 14),
+
+                                        // Keterangan
+                                        if (cuti.keterangan != null && cuti.keterangan!.isNotEmpty) ...[
+                                          const SizedBox(height: 12),
+                                          Container(
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.blue[50],
+                                              borderRadius: BorderRadius.circular(10),
+                                              border: Border.all(
+                                                color: Colors.blue[100]!,
+                                                width: 1,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Icon(
+                                                  Icons.info_outline,
+                                                  size: 16,
+                                                  color: Colors.blue[700],
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        'Keterangan',
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          fontWeight: FontWeight.w600,
+                                                          color: Colors.blue[700],
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 2),
+                                                      Text(
+                                                        cuti.keterangan!,
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          color: Colors.blue[900],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ],
-                                      ),
-                                    ],
-                                    const SizedBox(height: 12),
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: ElevatedButton.icon(
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: const Color(0xFF7C933F),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 16,
-                                            vertical: 10,
-                                          ),
-                                        ),
-                                        icon: const Icon(
-                                          Icons.visibility,
-                                          color: Colors.white,
-                                          size: 18,
-                                        ),
-                                        label: const Text(
-                                          'Detail',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        onPressed: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) => DetailCutiPage(
-                                                judul: cuti.kategori,
-                                                uraian: cuti.keterangan ?? 'Tidak ada keterangan',
-                                                status: cuti.statusValidasi,
-                                                tanggal: cuti.tanggalPengajuan,
-                                                foto: cuti.fotoBukti,
-                                                tanggalMulai: cuti.tanggalMulai,
-                                                tanggalAkhir: cuti.tanggalAkhir,
+
+                                        // ⭐ ALASAN PENOLAKAN
+                                        if (cuti.statusValidasi == 'Rejected' &&
+                                            cuti.alasanPenolakan != null &&
+                                            cuti.alasanPenolakan!.isNotEmpty) ...[
+                                          const SizedBox(height: 12),
+                                          Container(
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.red[50],
+                                              borderRadius: BorderRadius.circular(10),
+                                              border: Border.all(
+                                                color: Colors.red[200]!,
+                                                width: 1.5,
                                               ),
                                             ),
-                                          );
-                                        },
-                                      ),
+                                            child: Row(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Icon(
+                                                  Icons.warning_amber_rounded,
+                                                  size: 18,
+                                                  color: Colors.red[700],
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        'Alasan Penolakan',
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          fontWeight: FontWeight.w700,
+                                                          color: Colors.red[700],
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        cuti.alasanPenolakan!,
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          color: Colors.red[900],
+                                                          fontWeight: FontWeight.w500,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+
+                                        // Button Detail
+                                        const SizedBox(height: 12),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.end,
+                                          children: [
+                                            TextButton.icon(
+                                              onPressed: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) => DetailCutiPage(
+                                                      judul: cuti.kategori,
+                                                      uraian: cuti.keterangan ?? 'Tidak ada keterangan',
+                                                      status: cuti.statusValidasi,
+                                                      tanggal: cuti.tanggalPengajuan,
+                                                      foto: cuti.fotoBukti,
+                                                      tanggalMulai: cuti.tanggalMulai,
+                                                      tanggalAkhir: cuti.tanggalAkhir,
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                              icon: const Icon(
+                                                Icons.arrow_forward_ios,
+                                                size: 12,
+                                              ),
+                                              label: const Text(
+                                                'Lihat Detail',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              style: TextButton.styleFrom(
+                                                foregroundColor: const Color(0xFF7C933F),
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 12,
+                                                  vertical: 8,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             );
