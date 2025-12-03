@@ -16,7 +16,9 @@ class PanduanPage extends StatefulWidget {
 class _PanduanPageState extends State<PanduanPage> {
   String nama = '';
   String jabatan = '';
-  late Future<List<Article>> _futureArticles;
+  
+  // PERBAIKAN 1: Gunakan nullable tanpa late, dan inisialisasi dengan null
+  Future<List<Article>>? _futureArticles;
 
   String? _lastErrorText;
   StackTrace? _lastStack;
@@ -24,33 +26,55 @@ class _PanduanPageState extends State<PanduanPage> {
   @override
   void initState() {
     super.initState();
-    _loadUserInfo();
-    _loadArticles();
+    // PERBAIKAN 2: Wrap dalam try-catch untuk menangkap error
+    try {
+      _loadUserInfo();
+      _loadArticles();
+    } catch (e, st) {
+      dev.log('Error di initState', error: e, stackTrace: st, name: 'PanduanPage');
+      // Set error state
+      setState(() {
+        _lastErrorText = e.toString();
+        _lastStack = st;
+      });
+    }
   }
 
   Future<void> _loadArticles() async {
-    dev.log('Memuat artikel dari: ${Config.apiUrl}/api/articles', name: 'PanduanPage');
-    setState(() {
-      _futureArticles = ApiService.fetchArticles().then((value) {
-        _lastErrorText = null;
-        _lastStack = null;
-        dev.log('Berhasil memuat ${value.length} artikel', name: 'PanduanPage');
-        return value;
-      }).catchError((e, st) {
+    try {
+      dev.log('Memuat artikel dari: ${Config.apiUrl}/api/articles', name: 'PanduanPage');
+      setState(() {
+        _futureArticles = ApiService.fetchArticles().then((value) {
+          _lastErrorText = null;
+          _lastStack = null;
+          dev.log('Berhasil memuat ${value.length} artikel', name: 'PanduanPage');
+          return value;
+        }).catchError((e, st) {
+          _lastErrorText = e.toString();
+          _lastStack = st;
+          dev.log('Gagal memuat artikel', error: e, stackTrace: st, name: 'PanduanPage');
+          throw e;
+        });
+      });
+    } catch (e, st) {
+      dev.log('Error saat load articles', error: e, stackTrace: st, name: 'PanduanPage');
+      setState(() {
         _lastErrorText = e.toString();
         _lastStack = st;
-        dev.log('Gagal memuat artikel', error: e, stackTrace: st, name: 'PanduanPage');
-        throw e;
       });
-    });
+    }
   }
 
   Future<void> _loadUserInfo() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      nama = prefs.getString('nama') ?? 'User';
-      jabatan = prefs.getString('jabatan') ?? '';
-    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        nama = prefs.getString('nama') ?? 'User';
+        jabatan = prefs.getString('jabatan') ?? '';
+      });
+    } catch (e, st) {
+      dev.log('Error loading user info', error: e, stackTrace: st, name: 'PanduanPage');
+    }
   }
 
   @override
@@ -94,77 +118,79 @@ class _PanduanPageState extends State<PanduanPage> {
 
               // Daftar Artikel / Error / Loading
               Expanded(
-                child: FutureBuilder<List<Article>>(
-                  future: _futureArticles,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    } else if (snapshot.hasError) {
-                      return _ErrorView(
-                        errorText: _lastErrorText ?? snapshot.error.toString(),
-                        stack: _lastStack ?? snapshot.stackTrace,
-                        onRetry: _loadArticles,
-                      );
-                    } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      return const Center(child: Text('Belum ada artikel.'));
-                    }
-
-                    final articles = snapshot.data!;
-                    return ListView.builder(
-                      itemCount: articles.length,
-                      itemBuilder: (context, index) {
-                        final a = articles[index];
-
-                        // Navigasi ke detail artikel
-                        return InkWell(
-                          borderRadius: BorderRadius.circular(12),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ArticleDetailPage(
-                                  slug: a.slug,
-                                  titlePreview: a.title,
-                                ),
-                              ),
+                child: _futureArticles == null
+                    ? const Center(child: CircularProgressIndicator())
+                    : FutureBuilder<List<Article>>(
+                        future: _futureArticles,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(child: CircularProgressIndicator());
+                          } else if (snapshot.hasError) {
+                            return _ErrorView(
+                              errorText: _lastErrorText ?? snapshot.error.toString(),
+                              stack: _lastStack ?? snapshot.stackTrace,
+                              onRetry: _loadArticles,
                             );
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              border: Border.all(color: Colors.grey.shade300),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.all(12),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(Icons.article, color: Color.fromARGB(255, 110, 147, 37)),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
+                          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                            return const Center(child: Text('Belum ada artikel.'));
+                          }
+
+                          final articles = snapshot.data!;
+                          return ListView.builder(
+                            itemCount: articles.length,
+                            itemBuilder: (context, index) {
+                              final a = articles[index];
+
+                              // Navigasi ke detail artikel
+                              return InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ArticleDetailPage(
+                                        slug: a.slug,
+                                        titlePreview: a.title,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    border: Border.all(color: Colors.grey.shade300),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  padding: const EdgeInsets.all(12),
+                                  child: Row(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(a.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        a.excerpt,
-                                        maxLines: 3,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
+                                      const Icon(Icons.article, color: Color.fromARGB(255, 110, 147, 37)),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(a.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              a.excerpt,
+                                              maxLines: 3,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(fontSize: 12),
+                                            ),
+                                          ],
+                                        ),
+                                      )
                                     ],
                                   ),
-                                )
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
               ),
             ],
           ),
@@ -220,5 +246,3 @@ class _ErrorView extends StatelessWidget {
     );
   }
 }
-
-

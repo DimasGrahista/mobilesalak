@@ -446,7 +446,7 @@ class _RiwayatAbsensiPageState extends State<RiwayatAbsensiPage> {
                                                 ),
                                                 const SizedBox(width: 6),
                                                 Text(
-                                                  item['kategoriCuti'] ?? 'Cuti',
+                                                  'Cuti: ${item['kategoriCuti'] ?? 'Tidak Diketahui'}',
                                                   style: TextStyle(
                                                     fontSize: 15,
                                                     fontWeight: FontWeight.bold,
